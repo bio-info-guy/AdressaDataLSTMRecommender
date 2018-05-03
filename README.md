@@ -8,6 +8,7 @@ Total 5 Scripts that are used to preprocess and build models:
 
 
 **STEP 3:** Run the following commands to retrieve the articles and user-article interactions
+
      python3 getArticle.py 
      python3 getUserEvent.py
 
