@@ -23,6 +23,14 @@ from keras.regularizers import L1L2
 # In[253]:
 
 
+class LossHistory(Callback):
+    def on_train_begin(self, logs={}):
+        self.losses = []
+
+    def on_batch_end(self, batch, logs={}):
+        self.losses.append(logs.get('val_cosine_proximity'))
+
+
 def batch_generator(x, t):
     i=0
     while True:
@@ -40,46 +48,48 @@ def batch_generator(x, t):
 def LSTMbyTime(Xtrain, Ttrain,  Xtest, Ttest, epochs):
     K.clear_session()
     model = Sequential()
-    model.add(LSTM(512, input_shape=(None, Xtrain[0].shape[2]), return_sequences=True, kernel_regularizer=L1L2(0.01, 0.01), dropout=0.5))
-    model.add(LSTM(1024, input_shape=( None, Xtrain[0].shape[2]), kernel_regularizer=L1L2(0.01, 0.01),dropout=0.5))
-    model.add(Dense(2048))
+    model.add(LSTM(32, input_shape=(None, Xtrain[0].shape[2]), return_sequences=False, kernel_regularizer=L1L2(0, 0.1), dropout=0.5))
+#    model.add(LSTM(1024, input_shape=( None, Xtrain[0].shape[2]), kernel_regularizer=L1L2(0.01, 0.01),dropout=0.5))
+    model.add(Dense(1024))
     model.add(Activation('relu'))
     model.add(Dropout(0.5))
     model.add(Dense(Ttrain[0].shape[1]))
-    model.compile(loss='mean_squared_error', optimizer='adam', metrics=['cosine', 'mse'])
+    model.compile(loss='mean_squared_error', optimizer='rmsprop', metrics=['cosine'])
     model.summary()
     val_steps=len(Xtest)
     steps_per_epoch=len(Xtrain)
     filepath="time_weights.best.model"
+    losshist = LossHistory()
     checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
-    TB=TensorBoard(log_dir='./Graph_time', histogram_freq=0, write_graph=True, write_images=True)
-    callbacks_list = [checkpoint, TB]
+    TB=TensorBoard(log_dir='./Graph_time_best', histogram_freq=0, write_graph=True, write_images=True)
+    callbacks_list = [checkpoint, TB, losshist]
     history=model.fit_generator(batch_generator(Xtrain, Ttrain), steps_per_epoch=steps_per_epoch,epochs=epochs, validation_data=batch_generator(Xtest, Ttest), callbacks=callbacks_list, verbose=2, validation_steps=val_steps)
-    return {'model':model, 'history':history}
+    return {'model':model, 'history':history, 'losshist':losshist}
     
 
 
 # In[256]:
 
 
-def LSTMbyFixSeq(Xtrain, Ttrain, batch_size, epochs):
+def LSTMbyFixSeq(Xtrain, Ttrain, Xtest, Ttest, batch_size, epochs):
     K.clear_session()
-    filepath="fixed_weights.best.hdf5"
+    filepath="fixed_weights.best.model"
     checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
-    TB=TensorBoard(log_dir='./Graph_fixed', histogram_freq=0,  
+    TB=TensorBoard(log_dir='./Graph_fixed_best', histogram_freq=0,  
           write_graph=True, write_images=True)
-    callbacks_list = [checkpoint, TB]
+    losshist = LossHistory()
+    callbacks_list = [checkpoint, TB, losshist]
     model = Sequential()
-    model.add(LSTM(512, input_shape=(Xtrain.shape[1], Xtrain.shape[2]), kernel_regularizer=L1L2(0.01, 0.01), dropout=0.1, return_sequences=True))
-    model.add(LSTM(1024, input_shape=(Xtrain.shape[1], Xtrain.shape[2]), kernel_regularizer=L1L2(0.01, 0.01), dropout=0.5))
-    model.add(Dense(2048))
+    model.add(LSTM(256, input_shape=(Xtrain.shape[1], Xtrain.shape[2]), kernel_regularizer=L1L2(0.00, 0.6693497970822383), dropout=0.384051579948428, return_sequences=True))
+    model.add(LSTM(512, input_shape=(Xtrain.shape[1], Xtrain.shape[2]), kernel_regularizer=L1L2(0.00,  0.2232551758526089), dropout=0.5226618564648536))
+    model.add(Dense(512))
     model.add(Activation('relu'))
-    model.add(Dropout(0.5))
+#    model.add(Dropout(0.5))
     model.add(Dense(Ttrain.shape[1]))
-    model.compile(loss='mean_squared_error' , optimizer='adam', metrics=['mse', 'cosine'])
+    model.compile(loss='mean_squared_error' , optimizer='rmsprop', metrics=[ 'cosine'])
     model.summary()
-    history=model.fit(Xtrain, Ttrain,batch_size=batch_size,epochs=epochs, callbacks=callbacks_list, verbose=2, validation_split=0.2) 
-    return {'model':model, 'history':history}
+    history=model.fit(Xtrain, Ttrain,batch_size=batch_size,epochs=epochs, callbacks=callbacks_list, verbose=2, validation_data=(Xtest, Ttest)) 
+    return {'model':model, 'history':history, 'losshist':losshist}
 
 
 # In[258]:
@@ -88,16 +98,17 @@ def LSTMbyFixSeq(Xtrain, Ttrain, batch_size, epochs):
 def main(args):
     x_file=args[0]
     t_file=args[1]
-    model=args[2]
-    X=np.load(x_file)
-    T=np.load(t_file)
-    train_split=int(X.shape[0]//1.2)
-    Xtrain, Ttrain=X[:train_split], T[:train_split]
-    Xtest, Ttest=X[train_split:], T[train_split:]
+    x_cold=args[2]
+    t_cold=args[3]
+    model=args[4]
+    Xtrain=np.load(x_file)
+    Ttrain=np.load(t_file)
+    Xtest=np.load(x_cold)
+    Ttest=np.load(t_cold)
     if model == 'time':
-        test=LSTMbyTime(Xtrain, Ttrain, epochs=100)
+        test=LSTMbyTime(Xtrain, Ttrain, Xtest, Ttest, epochs=30)
     elif model == 'fixed':
-        test=LSTMbyFixSeq(Xtrain, Ttrain, batch_size=50, epochs=100)
+        test=LSTMbyFixSeq(Xtrain, Ttrain, Xtest, Ttest, batch_size=50, epochs=30)
     with open(model+'history.json','w') as f:
         json.dump(test['history'].history, f)
     
