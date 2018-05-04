@@ -23,7 +23,15 @@ from hyperopt import Trials, STATUS_OK, tpe
 from hyperas import optim
 from hyperas.distributions import choice, uniform, conditional
 
-
+def batch_generator(x, t):
+    i=0
+    while True:
+        if i == len(x):
+            i=0
+        else:
+            xtrain, ytrain=x[i], t[i]
+            i +=1
+    yield xtrain, ytrain
 
 def create_time_model(Xtrain, Ttrain,   Xtest, Ttest):
     def batch_generator(x, t):
@@ -112,17 +120,23 @@ def main(args):
                                           algo=tpe.suggest,
                                           max_evals=50,
                                           trials=Trials())
+        X_train, Y_train, X_test, Y_test = data()
+        print("Evalutation of best performing model:")
+        print(best_model.evaluate_generator(batch_generator(X_test, Y_test), steps=len(X_test)))
+        print("Best performing model chosen hyper-parameters:")
+        print(best_run) 
     elif model == 'fixed':
         best_run, best_model = optim.minimize(model=create_fix_model,
                                           data=data,
                                           algo=tpe.suggest,
                                           max_evals=50,
                                           trials=Trials())
-    X_train, Y_train, X_test, Y_test = data()
-    print("Evalutation of best performing model:")
-    print(best_model.evaluate(X_test, Y_test))
-    print("Best performing model chosen hyper-parameters:")
-    print(best_run)
+        X_train, Y_train, X_test, Y_test = data()
+        print("Evalutation of best performing model:")
+        print(best_model.evaluate(X_test, Y_test))
+        print("Best performing model chosen hyper-parameters:")
+        print(best_run)
+
 
 
 if __name__ == '__main__':

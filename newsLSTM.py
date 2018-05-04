@@ -25,11 +25,13 @@ from keras.regularizers import L1L2
 
 class LossHistory(Callback):
     def on_train_begin(self, logs={}):
-        self.losses = []
+        self.losses = {'val_loss':[], 'val_cosine_proximity':[], 'loss':[], 'cosine_proximity':[]}
 
     def on_batch_end(self, batch, logs={}):
-        self.losses.append(logs.get('val_cosine_proximity'))
-
+        self.losses['val_cosine_proximity'].append(logs.get('val_cosine_proximity'))
+        self.losses['val_loss'].append(logs.get('val_loss'))
+        self.losses['cosine_proximity'].append(logs.get('cosine_proximity'))
+        self.losses['loss'].append(logs.get('loss'))
 
 def batch_generator(x, t):
     i=0
@@ -64,6 +66,7 @@ def LSTMbyTime(Xtrain, Ttrain,  Xtest, Ttest, epochs):
     TB=TensorBoard(log_dir='./Graph_time_best', histogram_freq=0, write_graph=True, write_images=True)
     callbacks_list = [checkpoint, TB, losshist]
     history=model.fit_generator(batch_generator(Xtrain, Ttrain), steps_per_epoch=steps_per_epoch,epochs=epochs, validation_data=batch_generator(Xtest, Ttest), callbacks=callbacks_list, verbose=2, validation_steps=val_steps)
+    history.history['losshist']=losshist.losses
     return {'model':model, 'history':history, 'losshist':losshist}
     
 
@@ -88,7 +91,8 @@ def LSTMbyFixSeq(Xtrain, Ttrain, Xtest, Ttest, batch_size, epochs):
     model.add(Dense(Ttrain.shape[1]))
     model.compile(loss='mean_squared_error' , optimizer='rmsprop', metrics=[ 'cosine'])
     model.summary()
-    history=model.fit(Xtrain, Ttrain,batch_size=batch_size,epochs=epochs, callbacks=callbacks_list, verbose=2, validation_data=(Xtest, Ttest)) 
+    history=model.fit(Xtrain, Ttrain,batch_size=batch_size,epochs=epochs, callbacks=callbacks_list, verbose=2, validation_data=(Xtest, Ttest))
+    history.history['losshist']=losshist.losses
     return {'model':model, 'history':history, 'losshist':losshist}
 
 
@@ -106,9 +110,9 @@ def main(args):
     Xtest=np.load(x_cold)
     Ttest=np.load(t_cold)
     if model == 'time':
-        test=LSTMbyTime(Xtrain, Ttrain, Xtest, Ttest, epochs=30)
+        test=LSTMbyTime(Xtrain, Ttrain, Xtest, Ttest, epochs=10)
     elif model == 'fixed':
-        test=LSTMbyFixSeq(Xtrain, Ttrain, Xtest, Ttest, batch_size=50, epochs=30)
+        test=LSTMbyFixSeq(Xtrain, Ttrain, Xtest, Ttest, batch_size=50, epochs=10)
     with open(model+'history.json','w') as f:
         json.dump(test['history'].history, f)
     
